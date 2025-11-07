@@ -1,1 +1,15 @@
+# Fichiers sensibles
+.env
+
+# Cache Python
+__pycache__/
+*.pyc
+
+# Configs locales / OS
+.DS_Store
+Thumbs.db
+
+# Dossiers ou fichiers temporaires
+*.log
+*.tmp
 .env
