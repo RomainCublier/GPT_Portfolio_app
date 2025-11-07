@@ -1,6 +1,6 @@
 # ==========================================
 # 📁 portfolio_engine.py
-# GPT Portfolio Assistant – Backtest Engine (v4 robust)
+# GPT Portfolio Assistant – Backtest Engine (v5 final & universal)
 # ==========================================
 
 import yfinance as yf
@@ -10,11 +10,11 @@ import streamlit as st
 
 def run_backtest(allocation):
     """
-    Backtest d'un portefeuille GPT à partir des tickers fournis.
-    Gère tous les formats yfinance (Adj Close ou Close).
+    Backtest robuste d’un portefeuille GPT à partir des tickers Yahoo Finance.
+    Gère tous les formats de colonnes et les éventuels tickers manquants.
     """
     try:
-        # Extraction des tickers et poids
+        # --- Extraction tickers et poids
         tickers = [item["Ticker"] for item in allocation if item["Ticker"] != "ERROR"]
         weights = [float(item["Poids"]) for item in allocation if item["Ticker"] != "ERROR"]
 
@@ -24,41 +24,45 @@ def run_backtest(allocation):
         # Normaliser les poids
         weights = [w / sum(weights) for w in weights]
 
-        # Télécharger les données depuis Yahoo Finance
-        data = yf.download(tickers, start="2021-01-01")
+        # --- Télécharger les données Yahoo Finance
+        data = yf.download(tickers, start="2021-01-01", progress=False)
 
-        # ✅ Sélectionne Adj Close si dispo, sinon Close
-        if "Adj Close" in data.columns:
-            data = data["Adj Close"]
-        elif "Close" in data.columns:
-            data = data["Close"]
-        else:
-            raise KeyError("Aucune colonne de prix ('Adj Close' ou 'Close') trouvée.")
+        # ✅ Identifier la colonne correcte (Adj Close ou Close)
+        price_cols = [col for col in data.columns if "Adj Close" in str(col) or "Close" in str(col)]
+        if not price_cols:
+            raise KeyError("Aucune colonne de prix trouvée dans les données Yahoo Finance.")
 
-        # Aplatir les colonnes si MultiIndex
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = data.columns.get_level_values(0)
+        prices = data[price_cols]
 
-        # Si un seul ticker → forcer DataFrame
-        if isinstance(data, pd.Series):
-            data = data.to_frame(name=tickers[0])
+        # ✅ Nettoyage automatique des noms de colonnes (pour n'avoir que les tickers)
+        clean_cols = []
+        for c in prices.columns:
+            if isinstance(c, tuple):
+                clean_cols.append(c[-1])  # si MultiIndex
+            else:
+                name = str(c).replace("Adj Close", "").replace("Close", "").strip()
+                clean_cols.append(name)
+        prices.columns = clean_cols
 
-        # Calcul des rendements
-        returns = data.pct_change().dropna()
+        # ✅ Supprimer les colonnes vides / manquantes
+        prices = prices.dropna(axis=1, how="all")
 
-        # Alignement des colonnes
-        returns = returns[tickers]
+        # ✅ Filtrer uniquement les tickers présents
+        existing_tickers = [t for t in tickers if t in prices.columns]
+        if not existing_tickers:
+            raise KeyError(f"Aucun ticker valide trouvé dans les données. Colonnes reçues : {list(prices.columns)}")
 
-        # Poids sous forme de Series
-        weights_df = pd.Series(weights, index=tickers)
+        # Adapter les poids aux tickers réellement disponibles
+        valid_weights = [weights[tickers.index(t)] for t in existing_tickers]
+        valid_weights = [w / sum(valid_weights) for w in valid_weights]
 
-        # Calcul rendement global du portefeuille
-        portfolio_returns = (returns * weights_df).sum(axis=1)
-
-        # Valeur cumulée
+        # --- Calcul des rendements
+        returns = prices[existing_tickers].pct_change().dropna()
+        weights_series = pd.Series(valid_weights, index=existing_tickers)
+        portfolio_returns = (returns * weights_series).sum(axis=1)
         portfolio_value = (1 + portfolio_returns).cumprod()
 
-        # 📈 Graphique Plotly
+        # --- Graphique Plotly
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=portfolio_value.index,
