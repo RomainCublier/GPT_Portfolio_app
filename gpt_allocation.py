@@ -1,68 +1,63 @@
-# ==========================================
-# 📁 gpt_allocation.py
-# GPT Portfolio Assistant – Allocation Engine
-# ==========================================
-
-import os
 import json
 from openai import OpenAI
 
-def generate_portfolio_allocation(capital, horizon, risque, esg):
-    """
-    Génère une allocation de portefeuille avec GPT.
-    Retourne une liste de dictionnaires contenant :
-    - Ticker
-    - Poids
-    - Classe (catégorie d’actif)
-    """
-
-    # Charger la clé API depuis Streamlit Cloud
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        return [{"Ticker": "ERROR", "Poids": 0, "Classe": "Clé API introuvable"}]
-
+def generate_portfolio_allocation(api_key, capital, horizon, risque, esg):
     client = OpenAI(api_key=api_key)
 
-    # 🔧 Prompt explicite avec format JSON obligatoire
     prompt = f"""
-    Tu es un expert en gestion d'actifs.
-    Crée une allocation de portefeuille optimale pour :
+    Tu es un expert en gestion d’actifs. 
+    Génère une allocation d’investissement sous forme JSON avec des poids en fonction du profil suivant :
 
-    - Capital : {capital} €
+    - Capital à investir : {capital} €
     - Horizon d’investissement : {horizon}
     - Niveau de risque : {risque}
-    - Intégration ESG : {esg}
+    - Critères ESG : {esg}
 
-    Le total des poids doit faire 1.00 (100%).
-    Utilise des ETF et indices connus.
+    ⚙️ Contraintes :
+    - Le total des poids doit être de 1.0 (100 %)
+    - Pas d’immobilier
+    - Inclure au minimum 4 actifs diversifiés :
+        * Actions US : SPY ou SPYG
+        * Actions Europe : VGK
+        * Actions émergentes : EEM
+        * Obligations : AGG ou BND
+        * Or : GLDM
+        * Crypto : BTC-USD (si profil risqué)
+        * Cash (court terme) : BIL
 
-    Renvoie uniquement ta réponse au format JSON suivant :
-    {{
-        "allocation": [
-            {{"Ticker": "SPY", "Poids": 0.30, "Classe": "Actions US"}},
-            {{"Ticker": "SX5E", "Poids": 0.25, "Classe": "Actions Europe"}},
-            {{"Ticker": "AGG", "Poids": 0.25, "Classe": "Obligations"}},
-            {{"Ticker": "GLD", "Poids": 0.20, "Classe": "Or"}}
-        ]
-    }}
-    Pas d’explications, pas de texte supplémentaire — uniquement du JSON valide.
+    Retourne uniquement du JSON, au format suivant :
+    [
+      {{"Ticker": "SPY", "Poids": 0.3, "Classe": "Actions US"}},
+      {{"Ticker": "BND", "Poids": 0.4, "Classe": "Obligations"}},
+      {{"Ticker": "GLDM", "Poids": 0.2, "Classe": "Or"}},
+      {{"Ticker": "BIL", "Poids": 0.1, "Classe": "Cash"}}
+    ]
+
+    Puis ajoute une courte justification en 3 lignes maximum expliquant les choix stratégiques.
     """
 
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "Tu es un conseiller financier spécialisé en allocation d’actifs."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.6
+    )
+
+    # Récupération du texte
+    content = response.choices[0].message.content.strip()
+
+    # Tentative d’extraction du JSON
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-        )
-
-        raw_text = response.choices[0].message.content.strip()
-
-        # Essayer de parser la réponse en JSON
-        data = json.loads(raw_text)
-        return data.get("allocation", [])
-
-    except json.JSONDecodeError:
-        return [{"Ticker": "ERROR", "Poids": 0, "Classe": "Réponse GPT non lisible"}]
-
+        json_start = content.index('[')
+        json_end = content.index(']') + 1
+        json_str = content[json_start:json_end]
+        allocation = json.loads(json_str)
     except Exception as e:
-        return [{"Ticker": "ERROR", "Poids": 0, "Classe": f"Erreur : {str(e)}"}]
+        raise ValueError(f"Erreur d’extraction JSON : {e}\nContenu brut : {content}")
+
+    # Récupération du texte explicatif
+    justification = content[json_end:].strip()
+
+    return allocation, justification

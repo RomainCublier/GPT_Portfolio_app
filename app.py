@@ -1,49 +1,69 @@
+import os
 import streamlit as st
-from gpt_allocation import generate_portfolio_allocation
-from portfolio_engine import run_backtest
+import pandas as pd
+from dotenv import load_dotenv
 
+from gpt_allocation import generate_portfolio_allocation
+from portfolio_engine import backtest_portfolio
+
+# =========================
+#⚙️ CONFIGURATION DE L’APP
+# =========================
 st.set_page_config(page_title="GPT Portfolio Assistant", layout="wide")
+load_dotenv()
+api_key = os.getenv("OPENAI_API_KEY")
 
 st.title("🤖 GPT Portfolio Assistant")
-st.markdown("Crée ton portefeuille optimal avec l’aide de l’IA !")
+st.write("Une IA qui construit et analyse ton portefeuille d’investissement à partir de ton profil investisseur.")
 
-st.success("🔑 Clé API chargée avec succès")
+# =========================
+# 🧭 SAISIE DU PROFIL CLIENT
+# =========================
+st.sidebar.header("🎯 Profil investisseur")
 
-# ------------------------------
-# 🎯 Sidebar — Profil investisseur
-# ------------------------------
-st.sidebar.header("🧭 Profil Investisseur")
+capital = st.sidebar.number_input("💰 Capital à investir (€)", min_value=1000, max_value=1_000_000, value=10_000, step=1000)
+horizon = st.sidebar.selectbox("⏳ Horizon d’investissement", ["Court terme (<3 ans)", "Moyen terme (3-7 ans)", "Long terme (>7 ans)"])
+risque = st.sidebar.selectbox("⚡ Tolérance au risque", ["Prudent", "Équilibré", "Dynamique", "Audacieux"])
+esg = st.sidebar.selectbox("🌱 Préférence ESG", ["Indifférent", "Modéré", "Forte préférence"])
 
-capital = st.sidebar.number_input("💰 Capital à investir (€)", min_value=1000, value=10000, step=500)
-horizon = st.sidebar.selectbox("⏳ Horizon d’investissement", ["Court terme (<2 ans)", "Moyen terme (2–5 ans)", "Long terme (>5 ans)"])
-risque = st.sidebar.slider("⚖️ Niveau de risque", 0, 10, 5)
-esg = st.sidebar.checkbox("🌱 Intégrer des critères ESG ?", value=True)
+generate_button = st.sidebar.button("🚀 Générer mon portefeuille IA")
 
-# ------------------------------
-# 🚀 Génération de portefeuille
-# ------------------------------
-st.subheader("🎯 Allocation proposée par GPT")
+# =========================
+# 📊 GÉNÉRATION DU PORTEFEUILLE
+# =========================
+if generate_button:
+    with st.spinner("🤖 Génération du portefeuille par GPT..."):
+        try:
+            allocation, justification = generate_portfolio_allocation(
+                api_key=api_key,
+                capital=capital,
+                horizon=horizon,
+                risque=risque,
+                esg=esg
+            )
 
-if st.button("🚀 Générer mon portefeuille IA"):
-    try:
-        allocation = generate_portfolio_allocation(capital, horizon, risque, esg)
-        st.write("🔍 Allocation GPT :", allocation)
+            df_allocation = pd.DataFrame(allocation)
+            st.subheader("📊 Allocation proposée par l'IA")
+            st.dataframe(df_allocation, use_container_width=True)
 
-        if allocation and isinstance(allocation, list) and "Ticker" in allocation[0]:
-            st.success("✅ Allocation générée avec succès !")
-            st.dataframe(allocation)
+            st.markdown("### 🧠 Justification de l'allocation")
+            st.info(justification)
 
-            st.subheader("📊 Backtest du portefeuille")
-            fig = run_backtest(allocation)
+            # =========================
+            # 📈 BACKTEST AUTOMATIQUE
+            # =========================
+            st.subheader("📈 Backtest du portefeuille (2015–2025)")
+            fig, metrics = backtest_portfolio(df_allocation)
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.error("⚠️ Erreur : format d’allocation inattendu.")
-            st.json(allocation)
 
-    except Exception as e:
-        st.error(f"❌ Une erreur est survenue : {e}")
+            st.write("### 📊 Indicateurs de performance")
+            st.json(metrics)
 
-else:
-    st.info("👉 Remplis ton profil à gauche et clique sur **Générer mon portefeuille IA** pour commencer.")
+        except Exception as e:
+            st.error(f"❌ Erreur lors de la génération ou du backtest : {e}")
 
-st.markdown("Créé avec 💗 par Romain Cublier — Projet GPT Portfolio 2025")
+# =========================
+# 🧩 INFO APP
+# =========================
+st.markdown("---")
+st.caption("Projet créé par **Romain Cublier** — Assistant IA pour l’allocation et le backtest d’un portefeuille d’investissement.")
