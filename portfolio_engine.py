@@ -4,41 +4,51 @@ import plotly.graph_objects as go
 
 def backtest_portfolio(df_allocation):
     """
-    Backtest robuste du portefeuille proposé.
-    Gère les tickers manquants et les formats variables de Yahoo Finance.
+    Backtest robuste : gère tous les cas (colonnes manquantes, tickers invalides, formats variables).
     """
-
     tickers = df_allocation['Ticker'].tolist()
     weights = df_allocation['Poids'].tolist()
 
-    # Télécharger les données (multi-tickers ou single)
+    # Télécharger les prix
     data = yf.download(tickers, start="2015-01-01", end="2025-01-01", progress=False)
 
-    # Si un seul ticker → le DataFrame n’a pas de multi-index
-    if 'Adj Close' in data.columns:
-        data = pd.DataFrame(data['Adj Close'])
-    elif isinstance(data.columns, pd.MultiIndex):
-        data = data['Adj Close']
+    # Cas 1 : MultiIndex (plusieurs tickers)
+    if isinstance(data.columns, pd.MultiIndex):
+        if "Adj Close" in data.columns.levels[0]:
+            data = data["Adj Close"]
+        else:
+            # On prend la première couche valide (ex: 'Close')
+            first_layer = data.columns.levels[0][0]
+            data = data[first_layer]
+
+    # Cas 2 : une seule colonne (un seul ticker)
+    elif "Adj Close" in data.columns:
+        data = pd.DataFrame(data["Adj Close"])
+    elif "Close" in data.columns:
+        data = pd.DataFrame(data["Close"])
     else:
-        raise ValueError("Impossible de trouver la colonne 'Adj Close' dans les données Yahoo Finance.")
+        # Dernier recours : prendre la dernière colonne
+        data = pd.DataFrame(data.iloc[:, -1])
+        data.columns = tickers[:1]
 
-    # Nettoyage : supprimer les colonnes vides
-    data = data.dropna(axis=1, how='all')
+    # Nettoyage
+    data = data.dropna(axis=1, how="all")
 
-    # Vérifie que les tickers téléchargés existent bien
+    # Vérifier les tickers valides
     valid_tickers = [t for t in tickers if t in data.columns]
     if not valid_tickers:
-        raise ValueError(f"Aucun ticker valide téléchargé parmi : {tickers}")
+        raise ValueError(f"Aucun ticker valide trouvé parmi : {tickers}")
 
-    # Ajuster les poids si certains manquent
+    # Ajuster les poids
     weights = [w for t, w in zip(tickers, weights) if t in valid_tickers]
     weights = [w / sum(weights) for w in weights]
-
     data = data[valid_tickers]
+
+    # Normaliser les prix
     normalized = data / data.iloc[0]
     portfolio = (normalized * weights).sum(axis=1)
 
-    # Calcul des métriques
+    # Calculs de performance
     returns = portfolio.pct_change().dropna()
     cumulative_return = (portfolio.iloc[-1] / portfolio.iloc[0]) - 1
     annualized_return = (1 + cumulative_return) ** (1 / 10) - 1
@@ -55,7 +65,7 @@ def backtest_portfolio(df_allocation):
     # Graphique Plotly
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=portfolio.index, y=portfolio, mode='lines', name='Portefeuille'))
-    fig.update_layout(title="Performance du portefeuille (2015–2025)",
+    fig.update_layout(title="📈 Performance du portefeuille (2015–2025)",
                       xaxis_title="Date", yaxis_title="Valeur normalisée",
                       template="plotly_white")
 
