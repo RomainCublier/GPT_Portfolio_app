@@ -1,86 +1,43 @@
-# ==========================================
-# 📁 portfolio_engine.py
-# GPT Portfolio Assistant – Backtest Engine (v5 final & universal)
-# ==========================================
-
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
-import streamlit as st
 
-def run_backtest(allocation):
+def backtest_portfolio(df_allocation):
     """
-    Backtest robuste d’un portefeuille GPT à partir des tickers Yahoo Finance.
-    Gère tous les formats de colonnes et les éventuels tickers manquants.
+    Effectue un backtest simple du portefeuille proposé.
+    Prend un DataFrame avec colonnes : ['Ticker', 'Poids']
+    Retourne : figure Plotly + métriques de performance
     """
-    try:
-        # --- Extraction tickers et poids
-        tickers = [item["Ticker"] for item in allocation if item["Ticker"] != "ERROR"]
-        weights = [float(item["Poids"]) for item in allocation if item["Ticker"] != "ERROR"]
 
-        if not tickers or len(tickers) != len(weights):
-            raise ValueError("Aucun ticker valide reçu pour le backtest.")
+    tickers = df_allocation['Ticker'].tolist()
+    weights = df_allocation['Poids'].tolist()
 
-        # Normaliser les poids
-        weights = [w / sum(weights) for w in weights]
+    # Télécharger les prix ajustés
+    data = yf.download(tickers, start="2015-01-01", end="2025-01-01")['Adj Close']
 
-        # --- Télécharger les données Yahoo Finance
-        data = yf.download(tickers, start="2021-01-01", progress=False)
+    # Normaliser les rendements
+    normalized = data / data.iloc[0]
+    portfolio = (normalized * weights).sum(axis=1)
 
-        # ✅ Identifier la colonne correcte (Adj Close ou Close)
-        price_cols = [col for col in data.columns if "Adj Close" in str(col) or "Close" in str(col)]
-        if not price_cols:
-            raise KeyError("Aucune colonne de prix trouvée dans les données Yahoo Finance.")
+    # Calcul des métriques
+    returns = portfolio.pct_change().dropna()
+    cumulative_return = (portfolio[-1] / portfolio[0]) - 1
+    annualized_return = (1 + cumulative_return) ** (1 / 10) - 1
+    volatility = returns.std() * (252 ** 0.5)
+    sharpe = annualized_return / volatility if volatility != 0 else 0
 
-        prices = data[price_cols]
+    metrics = {
+        "Cumulative Return": f"{cumulative_return:.2%}",
+        "Annualized Return": f"{annualized_return:.2%}",
+        "Volatility (ann.)": f"{volatility:.2%}",
+        "Sharpe Ratio": f"{sharpe:.2f}"
+    }
 
-        # ✅ Nettoyage automatique des noms de colonnes (pour n'avoir que les tickers)
-        clean_cols = []
-        for c in prices.columns:
-            if isinstance(c, tuple):
-                clean_cols.append(c[-1])  # si MultiIndex
-            else:
-                name = str(c).replace("Adj Close", "").replace("Close", "").strip()
-                clean_cols.append(name)
-        prices.columns = clean_cols
+    # Graphique Plotly
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=portfolio.index, y=portfolio, mode='lines', name='Portefeuille'))
+    fig.update_layout(title="Performance du portefeuille (2015–2025)",
+                      xaxis_title="Date", yaxis_title="Valeur normalisée",
+                      template="plotly_white")
 
-        # ✅ Supprimer les colonnes vides / manquantes
-        prices = prices.dropna(axis=1, how="all")
-
-        # ✅ Filtrer uniquement les tickers présents
-        existing_tickers = [t for t in tickers if t in prices.columns]
-        if not existing_tickers:
-            raise KeyError(f"Aucun ticker valide trouvé dans les données. Colonnes reçues : {list(prices.columns)}")
-
-        # Adapter les poids aux tickers réellement disponibles
-        valid_weights = [weights[tickers.index(t)] for t in existing_tickers]
-        valid_weights = [w / sum(valid_weights) for w in valid_weights]
-
-        # --- Calcul des rendements
-        returns = prices[existing_tickers].pct_change().dropna()
-        weights_series = pd.Series(valid_weights, index=existing_tickers)
-        portfolio_returns = (returns * weights_series).sum(axis=1)
-        portfolio_value = (1 + portfolio_returns).cumprod()
-
-        # --- Graphique Plotly
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=portfolio_value.index,
-            y=portfolio_value.values,
-            mode="lines",
-            name="Portefeuille IA",
-            line=dict(color="blue", width=2)
-        ))
-
-        fig.update_layout(
-            title="📊 Backtest du portefeuille GPT (3 ans)",
-            xaxis_title="Date",
-            yaxis_title="Valeur du portefeuille (base 1.0)",
-            template="plotly_white"
-        )
-
-        return fig
-
-    except Exception as e:
-        st.error(f"❌ Erreur dans le backtest : {e}")
-        return go.Figure()
+    return fig, metrics
