@@ -1,68 +1,68 @@
-# gpt_allocation.py
+# ==========================================
+# 📁 gpt_allocation.py
+# GPT Portfolio Assistant – Allocation Engine
+# ==========================================
+
 import os
+import json
 from openai import OpenAI
-from dotenv import load_dotenv
-import pandas as pd
 
-# Charger la clé API depuis le fichier .env
-load_dotenv()
-api_key = os.getenv("OPENAI_API_KEY")
-
-if not api_key:
-    print("❌ Aucune clé API trouvée dans le fichier .env.")
-else:
-    print("✅ Clé API détectée.")
-
-# Initialiser le client OpenAI
-client = OpenAI(api_key=api_key)
-
-def generate_portfolio_allocation(profile):
+def generate_portfolio_allocation(capital, horizon, risque, esg):
     """
-    Génère une allocation de portefeuille basée sur le profil investisseur
-    grâce à GPT.
-    Entrée :
-        profile : dictionnaire avec les champs suivants :
-            - risk : 'Prudent', 'Équilibré' ou 'Dynamique'
-            - horizon : 'court', 'moyen', 'long'
-            - capital : montant en euros
-            - esg : booléen (optionnel)
-    Sortie :
-        DataFrame avec les classes d’actifs et leur pourcentage d’allocation
+    Génère une allocation de portefeuille avec GPT.
+    Retourne une liste de dictionnaires contenant :
+    - Ticker
+    - Poids
+    - Classe (catégorie d’actif)
     """
-    
+
+    # Charger la clé API depuis Streamlit Cloud
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return [{"Ticker": "ERROR", "Poids": 0, "Classe": "Clé API introuvable"}]
+
+    client = OpenAI(api_key=api_key)
+
+    # 🔧 Prompt explicite avec format JSON obligatoire
     prompt = f"""
-    Tu es un expert en gestion d’actifs.
-    Crée une allocation de portefeuille cohérente pour ce profil :
+    Tu es un expert en gestion d'actifs.
+    Crée une allocation de portefeuille optimale pour :
 
-    Niveau de risque : {profile.get('risk')}
-    Horizon d’investissement : {profile.get('horizon')}
-    Capital disponible : {profile.get('capital')} €
-    ESG (investissement durable) : {profile.get('esg', False)}
+    - Capital : {capital} €
+    - Horizon d’investissement : {horizon}
+    - Niveau de risque : {risque}
+    - Intégration ESG : {esg}
 
-    Réponds sous la forme d’un tableau clair avec 3 colonnes :
-    - Classe d’actif
-    - Description
-    - Pourcentage d’allocation (%)
-    Le total doit faire 100%.
+    Le total des poids doit faire 1.00 (100%).
+    Utilise des ETF et indices connus.
+
+    Renvoie uniquement ta réponse au format JSON suivant :
+    {{
+        "allocation": [
+            {{"Ticker": "SPY", "Poids": 0.30, "Classe": "Actions US"}},
+            {{"Ticker": "SX5E", "Poids": 0.25, "Classe": "Actions Europe"}},
+            {{"Ticker": "AGG", "Poids": 0.25, "Classe": "Obligations"}},
+            {{"Ticker": "GLD", "Poids": 0.20, "Classe": "Or"}}
+        ]
+    }}
+    Pas d’explications, pas de texte supplémentaire — uniquement du JSON valide.
     """
 
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.7
+            temperature=0.4,
         )
 
-        text = response.choices[0].message.content.strip()
+        raw_text = response.choices[0].message.content.strip()
 
-        # Conversion texte → DataFrame simple
-        lines = [l.split("|") for l in text.split("\n") if "|" in l]
-        df = pd.DataFrame(lines[1:], columns=[c.strip() for c in lines[0]])
-        df["Pourcentage d’allocation (%)"] = (
-            df["Pourcentage d’allocation (%)"].str.replace("%", "").astype(float)
-        )
-        return df
+        # Essayer de parser la réponse en JSON
+        data = json.loads(raw_text)
+        return data.get("allocation", [])
+
+    except json.JSONDecodeError:
+        return [{"Ticker": "ERROR", "Poids": 0, "Classe": "Réponse GPT non lisible"}]
 
     except Exception as e:
-        print("❌ Erreur API :", e)
-        return pd.DataFrame()
+        return [{"Ticker": "ERROR", "Poids": 0, "Classe": f"Erreur : {str(e)}"}]
