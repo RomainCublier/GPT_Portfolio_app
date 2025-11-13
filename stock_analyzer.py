@@ -1,96 +1,80 @@
-{
- "cells": [
-  {
-   "cell_type": "code",
-   "execution_count": 1,
-   "id": "eb58c70f-0370-403d-afd7-8c1d510876dd",
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "import yfinance as yf\n",
-    "import pandas as pd\n",
-    "import plotly.graph_objects as go\n",
-    "from openai import OpenAI\n",
-    "\n",
-    "\n",
-    "def analyze_stock(api_key, ticker):\n",
-    "    client = OpenAI(api_key=api_key)\n",
-    "\n",
-    "    # Récupération des données financières\n",
-    "    stock = yf.Ticker(ticker)\n",
-    "\n",
-    "    info = stock.info\n",
-    "    financials = stock.financials\n",
-    "    balance_sheet = stock.balance_sheet\n",
-    "    cashflow = stock.cashflow\n",
-    "\n",
-    "    # --- GPT Résumé stratégique ---\n",
-    "    prompt = f\"\"\"\n",
-    "    You are an equity research analyst. Provide a clear, professional analysis of the stock {ticker}.\n",
-    "    Structure your answer in 5 bullet points:\n",
-    "\n",
-    "    1) Business overview\n",
-    "    2) Growth drivers\n",
-    "    3) Profitability and margins\n",
-    "    4) Balance sheet strength (debt, liquidity)\n",
-    "    5) Key risks\n",
-    "\n",
-    "    Keep the style like a real asset-management analyst.\n",
-    "    \"\"\"\n",
-    "\n",
-    "    response = client.chat.completions.create(\n",
-    "        model=\"gpt-4o-mini\",\n",
-    "        messages=[{\"role\": \"user\", \"content\": prompt}],\n",
-    "        temperature=0.3\n",
-    "    )\n",
-    "\n",
-    "    summary = response.choices[0].message.content\n",
-    "\n",
-    "    return {\n",
-    "        \"info\": info,\n",
-    "        \"financials\": financials,\n",
-    "        \"balance_sheet\": balance_sheet,\n",
-    "        \"cashflow\": cashflow,\n",
-    "        \"summary\": summary\n",
-    "    }\n",
-    "\n",
-    "\n",
-    "def chart_revenues(financials):\n",
-    "    fig = go.Figure()\n",
-    "    rev = financials.loc[\"Total Revenue\"]\n",
-    "    fig.add_trace(go.Bar(x=rev.index, y=rev.values))\n",
-    "    fig.update_layout(title=\"Revenue\", template=\"plotly_white\")\n",
-    "    return fig\n"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "id": "15eb6a62-ac46-43dd-8db7-c27314d3ae4c",
-   "metadata": {},
-   "outputs": [],
-   "source": []
-  }
- ],
- "metadata": {
-  "kernelspec": {
-   "display_name": "Python [conda env:base] *",
-   "language": "python",
-   "name": "conda-base-py"
-  },
-  "language_info": {
-   "codemirror_mode": {
-    "name": "ipython",
-    "version": 3
-   },
-   "file_extension": ".py",
-   "mimetype": "text/x-python",
-   "name": "python",
-   "nbconvert_exporter": "python",
-   "pygments_lexer": "ipython3",
-   "version": "3.13.5"
-  }
- },
- "nbformat": 4,
- "nbformat_minor": 5
-}
+import yfinance as yf
+import pandas as pd
+import plotly.graph_objects as go
+from openai import OpenAI
+
+
+# ============================
+#   GPT STOCK ANALYSIS
+# ============================
+def analyze_stock(api_key, ticker):
+    """
+    Analyse une action avec GPT :
+    - Résumé de l'entreprise
+    - Analyse financière
+    - Risques clés
+    - Vision long terme
+    """
+
+    client = OpenAI(api_key=api_key)
+
+    prompt = f"""
+    You are a senior equity analyst.
+    Provide a clear and structured analysis of the stock {ticker}.
+
+    Include:
+    1) Business overview
+    2) Moat & competitive advantages
+    3) Key financial trends (growth, margins)
+    4) Risks
+    5) Long-term outlook
+    """
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    summary = response.choices[0].message.content
+
+    # ======= Financials from Yahoo =======
+    stock = yf.Ticker(ticker)
+    financials = stock.financials
+
+    if financials is None or financials.empty:
+        raise ValueError("No financial data available for this stock.")
+
+    # Extract Revenue
+    revenue = financials.loc["Total Revenue"].T
+    revenue.index = revenue.index.year
+
+    return {
+        "summary": summary,
+        "financials": revenue
+    }
+
+
+# ============================
+#   REVENUE CHART
+# ============================
+def chart_revenues(revenue_series):
+    """
+    Transforme la série de revenus en graphique Plotly.
+    """
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=revenue_series.index,
+        y=revenue_series.values,
+        name="Revenue"
+    ))
+
+    fig.update_layout(
+        title="Total Revenue (10 years)",
+        xaxis_title="Year",
+        yaxis_title="Revenue (USD)",
+        template="plotly_white"
+    )
+
+    return fig
+
