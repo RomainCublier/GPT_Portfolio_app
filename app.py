@@ -42,13 +42,21 @@ with tab1:
 
     if st.button("Generate Portfolio"):
         try:
-            df_alloc = generate_portfolio_allocation(
-                capital=capital,
-                risk=risk,
-                horizon=horizon,
-                esg=esg,
-                client=client
-            )
+            # ⬅️ Assure-toi d'avoir ces variables avant :
+# capital  -> float ou int
+# risk_level -> "Low" / "Medium" / "High"  (par ex.)
+# horizon_value -> "Short" / "Medium" / "Long"
+# esg_flag -> booléen True/False
+# api_key -> ta clé OpenAI (depuis st.secrets ou un text_input)
+
+df_allocation = generate_portfolio_allocation(
+    api_key=api_key,          # 1. ta clé OpenAI
+    capital=capital,          # 2. le capital saisi en €
+    horizon=horizon_value,    # 3. ton horizon d’investissement
+    risque=risk_level,        # 4. le niveau de risque (nom du param = "risque")
+    esg=esg_flag,             # 5. True/False selon la case ESG
+)
+
             st.success("Allocation generated!")
             st.dataframe(df_alloc)
 
