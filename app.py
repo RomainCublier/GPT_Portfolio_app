@@ -1,124 +1,101 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
-from datetime import datetime
 import yfinance as yf
-
-# === IMPORT DE TES MODULES ===
+from openai import OpenAI
 from gpt_allocation import generate_portfolio_allocation
 from portfolio_engine import backtest_portfolio
-from stock_analyzer import analyze_stock, chart_revenues
+from stock_analyzer import analyze_stock
 
+# Load API key from Streamlit Secrets
+api_key = st.secrets["OPENAI_API_KEY"]
+client = OpenAI(api_key=api_key)
 
-# ============================
-#   CONFIGURATION GÉNÉRALE
-# ============================
-st.set_page_config(
-    page_title="GPT Portfolio Assistant",
-    layout="wide",
-    page_icon="📈"
-)
+# ----------------------------
+# PAGE CONFIG
+# ----------------------------
+st.set_page_config(page_title="GPT Portfolio Assistant", layout="wide")
 
 st.title("📈 GPT Portfolio Assistant — AI Investment App")
 
 
-# ============================
-#       MENU LATERAL
-# ============================
-menu = st.sidebar.selectbox(
-    "Navigation",
-    ["Portfolio IA", "Backtest", "Stock Analyzer"]
-)
+# ----------------------------
+# TAB NAVIGATION
+# ----------------------------
+tab1, tab2, tab3 = st.tabs([
+    "🚀 AI Portfolio Generator",
+    "📊 Portfolio Backtest",
+    "🔎 Stock Analyzer (GPT Trainer)"
+])
 
 
-# ==========================================================
-#  1️⃣ PAGE ALLOCATION IA : GPT génère l'allocation ETF
-# ==========================================================
-if menu == "Portfolio IA":
-
+# ============================================================
+# 🚀 1. PORTFOLIO GENERATOR
+# ============================================================
+with tab1:
     st.header("🤖 AI Portfolio Generator")
 
-    capital = st.number_input("Capital (€)", min_value=1000, value=10000)
-    risk = st.selectbox("Risk Level", ["Low", "Medium", "High"])
+    capital = st.number_input("Capital (€)", min_value=100, value=10000, step=100)
+
+    risk = st.selectbox("Risk Level", ["Low", "Moderate", "High"])
     horizon = st.selectbox("Investment Horizon", ["Short", "Medium", "Long"])
     esg = st.checkbox("Include ESG constraints")
 
-    api_key = st.secrets["OPENAI_API_KEY"]
-
     if st.button("Generate Portfolio"):
         try:
-            with st.spinner("GPT is generating your optimized portfolio..."):
-                df, explanation = generate_portfolio_allocation(
-                    api_key=api_key,
-                    capital=capital,
-                    risk=risk,
-                    horizon=horizon,
-                    esg=esg
-                )
-
-            st.subheader("📊 Suggested Portfolio Allocation")
-            st.dataframe(df)
-
-            st.subheader("🧠 GPT Explanation")
-            st.info(explanation)
-
-        except Exception as e:
-            st.error(f"❌ Erreur lors du calcul : {e}")
-
-
-# ==========================================================
-#   2️⃣ PAGE BACKTEST : calcul historique du portefeuille
-# ==========================================================
-elif menu == "Backtest":
-
-    st.header("📉 Portfolio Backtest")
-
-    st.write("Upload an allocation file or paste a table.")
-
-    file = st.file_uploader("Upload CSV with columns: Ticker, Allocation (%)")
-
-    if file:
-        try:
-            df_alloc = pd.read_csv(file)
+            df_alloc = generate_portfolio_allocation(
+                capital=capital,
+                risk=risk,
+                horizon=horizon,
+                esg=esg,
+                client=client
+            )
+            st.success("Allocation generated!")
             st.dataframe(df_alloc)
 
-            with st.spinner("Running backtest..."):
-                fig, metrics = run_backtest(df_alloc)
+        except Exception as e:
+            st.error(f"❌ Error during calculation : {e}")
 
-            st.subheader("📈 Portfolio Performance")
+
+# ============================================================
+# 📊 2. PORTFOLIO BACKTEST
+# ============================================================
+with tab2:
+    st.header("📊 Portfolio Backtest")
+
+    st.write("Upload a CSV with columns: **Ticker, Allocation**")
+
+    uploaded = st.file_uploader("Upload Portfolio CSV", type=["csv"])
+
+    if uploaded:
+        try:
+            df = pd.read_csv(uploaded)
+            st.dataframe(df)
+
+            tickers = df["Ticker"].tolist()
+            weights = df["Allocation"].tolist()
+
+            st.info("Running backtest...")
+
+            fig = run_backtest(tickers, weights)
             st.plotly_chart(fig, use_container_width=True)
 
-            st.subheader("📊 Performance Metrics")
-            st.write(metrics)
-
         except Exception as e:
-            st.error(f"❌ Error during backtest : {e}")
+            st.error(f"❌ Error during backtest: {e}")
 
 
-# ==========================================================
-#   3️⃣ PAGE STOCK ANALYZER — GPT Investment Trainer
-# ==========================================================
-elif menu == "Stock Analyzer":
-
+# ============================================================
+# 🔎 3. STOCK ANALYZER
+# ============================================================
+with tab3:
     st.header("🔎 Stock Analyzer — GPT Investment Trainer")
 
-    api_key = st.secrets["OPENAI_API_KEY"]
-    ticker = st.text_input("Enter stock ticker (AAPL, MSFT, NVDA, LVMH.PA)", "")
+    ticker = st.text_input("Enter stock ticker (ex: AAPL, TSLA, NVDA):")
 
-    if st.button("Analyze Stock"):
-        if ticker == "":
-            st.error("Please enter a ticker.")
-        else:
-            try:
-                with st.spinner("GPT analyzing the stock fundamentals..."):
-                    res = analyze_stock(api_key, ticker)
+    if st.button("Analyze stock"):
+        try:
+            result = analyze_stock(ticker, client)
+            st.success("Analysis complete!")
+            st.write(result)
 
-                st.subheader("📘 GPT Summary")
-                st.info(res["summary"])
-
-                st.subheader("📊 10-Year Revenue Chart")
-                fig = chart_revenues(res["financials"])
-                st.plotly_chart(fig)
-
-            except Exception as e:
-                st.error(f"❌ Cannot analyze stock : {e}")
+        except Exception as e:
+            st.error(f"❌ Error : {e}")
