@@ -6,7 +6,7 @@ import yfinance as yf
 
 # === IMPORT DE TES MODULES ===
 from gpt_allocation import generate_portfolio_allocation
-from portfolio_engine import run_backtest
+from portfolio_engine import backtest_portfolio
 from stock_analyzer import analyze_stock, chart_revenues
 
 
