@@ -275,45 +275,66 @@ def run_backtest(allocation_df: pd.DataFrame, start_date="2018-01-01", benchmark
 # 3. STOCK ANALYZER (ANALYSE D’UN TICKER)
 # --------------------------------------------------
 
-def analyze_ticker(ticker: str, period_years: int = 3):
-    end = datetime.today()
-    start = end - timedelta(days=365 * period_years)
+import streamlit as st
+import yfinance as yf
+import pandas as pd
+import plotly.express as px
 
-    data = yf.download(ticker, start=start, end=end, progress=False)
-    if data.empty:
-        raise ValueError("Aucune donnée pour ce ticker.")
 
-    if "Adj Close" in data.columns:
-        prices = data["Adj Close"].copy()
-    else:
-        prices = data["Close"].copy()
+def stock_analyzer_page():
 
-    returns = prices.pct_change().dropna()
+    st.header("📈 Stock Analyzer (no API, Yahoo Finance only)")
+    st.write("Analyze any stock, crypto, or ETF using free price data from Yahoo Finance.")
 
-    # Perf totale
-    total_return = prices.iloc[-1] / prices.iloc[0] - 1
+    ticker = st.text_input("Ticker (e.g., AAPL, MSFT, SPY, BTC-USD)", "AAPL")
 
-    # Vol annualisée
-    vol = returns.std() * np.sqrt(252)
+    period = st.selectbox(
+        "History period",
+        ["1y", "5y", "10y", "max"],
+        index=1
+    )
 
-    # Max drawdown
-    cum = (1 + returns).cumprod()
-    running_max = cum.cummax()
-    drawdown = cum / running_max - 1
-    max_dd = drawdown.min()
+    if st.button("Analyze"):
+        try:
+            df = yf.download(ticker, period=period)
 
-    metrics = {
-        "Total Return": total_return,
-        "Annualized Volatility": vol,
-        "Max Drawdown": max_dd,
-        "Last Price": prices.iloc[-1],
-    }
+            if df.empty:
+                st.error("Invalid ticker or unavailable data.")
+                return
 
-    fig = px.line(prices, labels={"value": "Price", "index": "Date"}, title=f"{ticker} Price History")
-    fig.update_traces(name=ticker, showlegend=True)
+            df["Date"] = df.index
 
-    return fig, metrics
+            # ---- PRICE CHART ----
+            st.subheader(f"{ticker} Price History")
 
+            fig = px.line(df, x="Date", y="Adj Close", title=f"{ticker} Price")
+            st.plotly_chart(fig, use_container_width=True)
+
+            # ---- METRICS ----
+            st.subheader("Performance Metrics")
+
+            df["Daily Return"] = df["Adj Close"].pct_change()
+            df = df.dropna()
+
+            # CAGR
+            start_price = df["Adj Close"].iloc[0]
+            end_price = df["Adj Close"].iloc[-1]
+            years = len(df) / 252
+            cagr = (end_price / start_price) ** (1 / years) - 1
+
+            # Volatility
+            vol = df["Daily Return"].std() * (252 ** 0.5)
+
+            # Sharpe (risk-free = 0)
+            sharpe = cagr / vol if vol != 0 else 0
+
+            col1, col2, col3 = st.columns(3)
+            col1.metric("CAGR", f"{cagr*100:.2f}%")
+            col2.metric("Volatility (ann.)", f"{vol*100:.2f}%")
+            col3.metric("Sharpe Ratio", f"{sharpe:.2f}")
+
+        except Exception as e:
+            st.error(f"Error during analysis: {e}")
 
 # --------------------------------------------------
 # 4. UI : DEUX SECTIONS (PORTFOLIO / STOCK ANALYZER)
