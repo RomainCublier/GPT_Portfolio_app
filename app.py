@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 
-from portfolio_engine import run_backtest
+from portfolio_engine import backtest_portfolio
 from gpt_allocation import generate_portfolio_allocation
 from stock_analyzer import run_stock_analyzer
 
