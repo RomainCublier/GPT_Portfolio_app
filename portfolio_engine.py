@@ -1,72 +1,44 @@
-import yfinance as yf
+"""Portfolio backtesting utilities using Yahoo Finance data."""
+
 import pandas as pd
 import plotly.graph_objects as go
 
-def backtest_portfolio(df_allocation):
+from config.assumptions import DEFAULT_END_DATE, DEFAULT_START_DATE
+from utils.data_loader import download_price_data, ensure_valid_tickers
+from utils.metrics import compute_portfolio_metrics
+from utils.streamlit_helpers import allocation_percent_to_weights
+
+
+def backtest_portfolio(df_allocation: pd.DataFrame):
+    """Backtest a portfolio allocation dataframe.
+
+    The input dataframe must contain at least ``Ticker`` and ``Allocation (%)`` columns.
+    A ``Poids`` column will be created automatically from the percentage weights.
     """
-    Backtest robuste : gère tous les cas (colonnes manquantes, tickers invalides, formats variables).
-    """
-    tickers = df_allocation['Ticker'].tolist()
-    weights = df_allocation['Poids'].tolist()
 
-    # Télécharger les prix
-    data = yf.download(tickers, start="2015-01-01", end="2025-01-01", progress=False)
+    df_alloc = allocation_percent_to_weights(df_allocation)
+    tickers = df_alloc["Ticker"].tolist()
+    weights = df_alloc["Poids"].tolist()
 
-    # Cas 1 : MultiIndex (plusieurs tickers)
-    if isinstance(data.columns, pd.MultiIndex):
-        if "Adj Close" in data.columns.levels[0]:
-            data = data["Adj Close"]
-        else:
-            # On prend la première couche valide (ex: 'Close')
-            first_layer = data.columns.levels[0][0]
-            data = data[first_layer]
+    data = download_price_data(tickers, start=DEFAULT_START_DATE, end=DEFAULT_END_DATE)
+    valid_tickers = ensure_valid_tickers(data, tickers)
 
-    # Cas 2 : une seule colonne (un seul ticker)
-    elif "Adj Close" in data.columns:
-        data = pd.DataFrame(data["Adj Close"])
-    elif "Close" in data.columns:
-        data = pd.DataFrame(data["Close"])
-    else:
-        # Dernier recours : prendre la dernière colonne
-        data = pd.DataFrame(data.iloc[:, -1])
-        data.columns = tickers[:1]
-
-    # Nettoyage
-    data = data.dropna(axis=1, how="all")
-
-    # Vérifier les tickers valides
-    valid_tickers = [t for t in tickers if t in data.columns]
-    if not valid_tickers:
-        raise ValueError(f"Aucun ticker valide trouvé parmi : {tickers}")
-
-    # Ajuster les poids
     weights = [w for t, w in zip(tickers, weights) if t in valid_tickers]
     weights = [w / sum(weights) for w in weights]
     data = data[valid_tickers]
 
-    # Normaliser les prix
     normalized = data / data.iloc[0]
     portfolio = (normalized * weights).sum(axis=1)
 
-    # Calculs de performance
-    returns = portfolio.pct_change().dropna()
-    cumulative_return = (portfolio.iloc[-1] / portfolio.iloc[0]) - 1
-    annualized_return = (1 + cumulative_return) ** (1 / 10) - 1
-    volatility = returns.std() * (252 ** 0.5)
-    sharpe = annualized_return / volatility if volatility != 0 else 0
+    metrics = compute_portfolio_metrics(portfolio)
 
-    metrics = {
-        "Cumulative Return": f"{cumulative_return:.2%}",
-        "Annualized Return": f"{annualized_return:.2%}",
-        "Volatility (ann.)": f"{volatility:.2%}",
-        "Sharpe Ratio": f"{sharpe:.2f}"
-    }
-
-    # Graphique Plotly
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=portfolio.index, y=portfolio, mode='lines', name='Portefeuille'))
-    fig.update_layout(title="📈 Performance du portefeuille (2015–2025)",
-                      xaxis_title="Date", yaxis_title="Valeur normalisée",
-                      template="plotly_white")
+    fig.add_trace(go.Scatter(x=portfolio.index, y=portfolio, mode="lines", name="Portefeuille"))
+    fig.update_layout(
+        title="📈 Performance du portefeuille",
+        xaxis_title="Date",
+        yaxis_title="Valeur normalisée",
+        template="plotly_white",
+    )
 
     return fig, metrics
