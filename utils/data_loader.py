@@ -84,6 +84,12 @@ def fetch_asset_profile(ticker: str) -> Dict[str, Optional[str]]:
         "instrument_type": info.get("quoteType") or info.get("typeDisp"),
         "exchange": info.get("exchange") or info.get("fullExchangeName"),
         "currency": info.get("currency") or info.get("financialCurrency"),
+        "sector": info.get("sector"),
+        "industry": info.get("industry"),
+        "country": info.get("country"),
+        "fullTimeEmployees": info.get("fullTimeEmployees"),
+        "marketCap": info.get("marketCap"),
+        "website": info.get("website"),
         "first_trade_date": info.get("firstTradeDateEpochUtc") or info.get("firstTradeDateEpoch"),
         "summary": info.get("longBusinessSummary") or info.get("description"),
     }
