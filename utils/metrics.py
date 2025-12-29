@@ -21,7 +21,7 @@ def compute_portfolio_metrics(portfolio_values: pd.Series) -> dict:
 
 
 def compute_asset_metrics(adjusted_close: pd.Series) -> dict:
-    """Compute CAGR, volatility and Sharpe ratio for a single asset."""
+    """Compute advanced diagnostics for a single asset."""
 
     df = adjusted_close.to_frame("Adj Close")
     df["Daily Return"] = df["Adj Close"].pct_change()
@@ -35,8 +35,19 @@ def compute_asset_metrics(adjusted_close: pd.Series) -> dict:
     vol = df["Daily Return"].std() * (252 ** 0.5)
     sharpe = cagr / vol if vol != 0 else 0
 
+    cumulative = (1 + df["Daily Return"]).cumprod()
+    running_max = cumulative.cummax()
+    drawdowns = (cumulative / running_max) - 1
+    max_drawdown = drawdowns.min()
+
+    best_day = df["Daily Return"].max()
+    worst_day = df["Daily Return"].min()
+
     return {
         "CAGR": cagr,
         "Volatility (ann.)": vol,
         "Sharpe Ratio": sharpe,
+        "Max Drawdown": max_drawdown,
+        "Best Day": best_day,
+        "Worst Day": worst_day,
     }
