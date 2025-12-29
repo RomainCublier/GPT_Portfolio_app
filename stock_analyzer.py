@@ -6,6 +6,7 @@ import pandas as pd
 
 from config import assumptions
 from utils.data_loader import download_price_data, fetch_asset_profile
+from utils.data_loader import download_price_data
 from utils.metrics import compute_asset_metrics
 from utils.streamlit_helpers import handle_network_error
 
@@ -27,6 +28,9 @@ def run_stock_analyzer():
         "1 year": 1,
         "5 years": 5,
         "10 years": 10,
+        "1 year": "365D",
+        "5 years": "5Y",
+        "10 years": "10Y",
         "Max history": None,
     }
 
@@ -39,6 +43,11 @@ def run_stock_analyzer():
                 start_date = assumptions.DEFAULT_START_DATE
 
             df = download_price_data([ticker], start=start_date, end=None)
+            if period_map[period_label]:
+                df = download_price_data([ticker], start=None, end=None)
+                df = df.last(period_map[period_label])
+            else:
+                df = download_price_data([ticker], start=assumptions.DEFAULT_START_DATE, end=None)
 
             if df.empty:
                 st.error("❌ Invalid ticker or no data available.")

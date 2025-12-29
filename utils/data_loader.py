@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 from typing import Dict, Iterable, List, Optional
+from typing import Iterable, List, Optional
 
 import pandas as pd
 import yfinance as yf
