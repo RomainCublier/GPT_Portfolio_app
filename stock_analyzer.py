@@ -1,81 +1,80 @@
+"""Streamlit module for single-asset analysis."""
+
 import streamlit as st
-import yfinance as yf
-import pandas as pd
 import plotly.express as px
+import pandas as pd
+
+from config import assumptions
+from utils.data_loader import download_price_data, fetch_asset_profile
+from utils.metrics import compute_asset_metrics
+from utils.streamlit_helpers import handle_network_error
 
 
 def run_stock_analyzer():
-
-    st.header("📈 Stock Analyzer (no API, Yahoo Finance only)")
+    st.header("📈 Stock Analyzer (Yahoo Finance)")
     st.write(
-        "Analyze stocks, ETFs, or cryptos using free Yahoo Finance data — "
-        "no API key required."
+        "Analyze stocks, ETFs, or cryptos using free Yahoo Finance data — no API key required."
     )
 
-    # --- USER INPUTS ---
     ticker = st.text_input("Ticker (e.g., AAPL, MSFT, SPY, BTC-USD)", "AAPL")
-
     period_label = st.selectbox(
         "History period",
         ["1 year", "5 years", "10 years", "Max history"],
-        index=1
+        index=1,
     )
 
-    # Convert label to yfinance format
     period_map = {
-        "1 year": "1y",
-        "5 years": "5y",
-        "10 years": "10y",
-        "Max history": "max"
+        "1 year": 1,
+        "5 years": 5,
+        "10 years": 10,
+        "Max history": None,
     }
-    yf_period = period_map[period_label]
 
-    # --- ANALYZE BUTTON ---
     if st.button("Analyze"):
-
         try:
-            # Download data
-            df = yf.download(ticker, period=yf_period)
+            years = period_map[period_label]
+            if years:
+                start_date = (pd.Timestamp.today() - pd.DateOffset(years=years)).date().isoformat()
+            else:
+                start_date = assumptions.DEFAULT_START_DATE
+
+            df = download_price_data([ticker], start=start_date, end=None)
 
             if df.empty:
                 st.error("❌ Invalid ticker or no data available.")
                 return
 
-            df["Date"] = df.index
+            profile = None
+            try:
+                profile = fetch_asset_profile(ticker)
+            except Exception as profile_err:  # noqa: BLE001
+                st.warning(f"ℹ️ Impossible de récupérer la description de l'actif: {profile_err}")
 
-            # --- PRICE CHART ---
+            if profile:
+                st.subheader("🧾 Aperçu de l'actif")
+                st.markdown(
+                    f"**{profile.get('name', ticker)}** — {profile.get('instrument_type', 'Instrument')} \n"
+                    f"Cote: {profile.get('exchange', 'N/A')} | Devise: {profile.get('currency', 'N/A')}"
+                )
+                inception_date = profile.get("first_trade_date")
+                if inception_date:
+                    inception_date = pd.to_datetime(inception_date, unit="s").date()
+                    st.write(f"🗓️ Première cotation: {inception_date}")
+                summary = profile.get("summary")
+                if summary:
+                    st.write(summary)
+
+            df["Date"] = df.index
             st.subheader(f"{ticker} Price History")
-            fig = px.line(
-                df,
-                x="Date",
-                y="Adj Close",
-                title=f"{ticker} Price Chart"
-            )
+            fig = px.line(df, x="Date", y=ticker, title=f"{ticker} Price Chart")
             st.plotly_chart(fig, use_container_width=True)
 
-            # --- PERFORMANCE METRICS ---
             st.subheader("📊 Performance Metrics")
-
-            df["Daily Return"] = df["Adj Close"].pct_change()
-            df = df.dropna()
-
-            # CAGR
-            start_price = df["Adj Close"].iloc[0]
-            end_price = df["Adj Close"].iloc[-1]
-            years = len(df) / 252
-            cagr = (end_price / start_price) ** (1 / years) - 1
-
-            # Annualized Volatility
-            vol = df["Daily Return"].std() * (252 ** 0.5)
-
-            # Sharpe Ratio (rf = 0)
-            sharpe = cagr / vol if vol != 0 else 0
-
-            # Display metrics
+            metrics = compute_asset_metrics(df[ticker])
             col1, col2, col3 = st.columns(3)
-            col1.metric("CAGR", f"{cagr * 100:.2f}%")
-            col2.metric("Volatility (ann.)", f"{vol * 100:.2f}%")
-            col3.metric("Sharpe Ratio", f"{sharpe:.2f}")
+            col1.metric("CAGR", f"{metrics['CAGR'] * 100:.2f}%")
+            col2.metric("Volatility (ann.)", f"{metrics['Volatility (ann.)'] * 100:.2f}%")
+            col3.metric("Sharpe Ratio", f"{metrics['Sharpe Ratio']:.2f}")
 
-        except Exception as e:
-            st.error(f"❌ Error during analysis: {e}")
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"❌ Error during analysis: {handle_network_error(exc)}")
