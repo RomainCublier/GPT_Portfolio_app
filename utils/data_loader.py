@@ -1,6 +1,7 @@
 """Data loading utilities (e.g., Yahoo Finance downloads with sane defaults)."""
 
 from functools import lru_cache
+from typing import Dict, Iterable, List, Optional
 from typing import Iterable, List, Optional
 
 import pandas as pd
@@ -65,3 +66,24 @@ def ensure_valid_tickers(data: pd.DataFrame, tickers: List[str]) -> List[str]:
     if not valid:
         raise ValueError(f"No valid tickers found among: {tickers}")
     return valid
+
+
+def fetch_asset_profile(ticker: str) -> Dict[str, Optional[str]]:
+    """Retrieve descriptive information for a given ticker via yfinance."""
+
+    try:
+        info = yf.Ticker(ticker).get_info()
+    except Exception as exc:  # noqa: BLE001 - handled explicitly below
+        raise ValueError(handle_network_error(exc)) from exc
+
+    if not info:
+        raise ValueError("No descriptive information available for this asset.")
+
+    return {
+        "name": info.get("longName") or info.get("shortName") or ticker,
+        "instrument_type": info.get("quoteType") or info.get("typeDisp"),
+        "exchange": info.get("exchange") or info.get("fullExchangeName"),
+        "currency": info.get("currency") or info.get("financialCurrency"),
+        "first_trade_date": info.get("firstTradeDateEpochUtc") or info.get("firstTradeDateEpoch"),
+        "summary": info.get("longBusinessSummary") or info.get("description"),
+    }
