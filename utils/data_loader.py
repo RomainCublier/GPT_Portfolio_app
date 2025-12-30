@@ -2,7 +2,6 @@
 
 from functools import lru_cache
 from typing import Dict, Iterable, List, Optional
-from typing import Iterable, List, Optional
 
 import pandas as pd
 import yfinance as yf
@@ -39,7 +38,9 @@ def _download_price_data_cached(
         data = pd.DataFrame(data["Close"])
     else:
         data = pd.DataFrame(data.iloc[:, -1])
-        data.columns = tickers_list[:1]
+
+    if len(tickers_list) == 1:
+        data.columns = [tickers_list[0]]
 
     return data.dropna(axis=1, how="all")
 
