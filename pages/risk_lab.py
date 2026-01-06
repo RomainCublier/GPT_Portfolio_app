@@ -180,13 +180,34 @@ def main():
     stress_df = evaluate_stress_scenarios(weights, default_stress_scenarios(tickers))
 
     st.subheader("Portfolio Weights")
-    weights_df = pd.DataFrame({"Weight": weights}).sort_values(by="Weight", ascending=False)
-    st.dataframe(weights_df.style.format({"Weight": "{:.2%}"}))
+    weights_df = weights.rename("Weight").reset_index()
+    weights_df.columns = ["Ticker", "Weight"]
+    weights_df = weights_df.dropna(subset=["Weight"])
 
-    pie_fig = px.pie(
-        weights_df.reset_index(), names="index", values="Weight", hole=0.3, title="Allocation"
-    )
-    st.plotly_chart(pie_fig, use_container_width=True)
+    if weights_df.empty:
+        st.warning("No valid weights to display for this portfolio.")
+    else:
+        weights_df["Weight"] = pd.to_numeric(weights_df["Weight"], errors="coerce")
+        weights_df = weights_df.dropna(subset=["Weight"])
+
+        total_weight = weights_df["Weight"].sum()
+        if total_weight > 0 and abs(total_weight - 1) > 1e-6:
+            weights_df["Weight"] = weights_df["Weight"] / total_weight
+
+        if weights_df.empty or weights_df["Weight"].sum() == 0:
+            st.warning("Portfolio weights are empty after cleaning. Please review the inputs.")
+        else:
+            weights_df = weights_df.sort_values(by="Weight", ascending=False)
+            st.dataframe(weights_df.set_index("Ticker").style.format({"Weight": "{:.2%}"}))
+
+            pie_fig = px.pie(
+                weights_df,
+                names="Ticker",
+                values="Weight",
+                hole=0.3,
+                title="Portfolio Allocation",
+            )
+            st.plotly_chart(pie_fig, use_container_width=True)
 
     st.subheader("Performance")
     cum_portfolio = cumulative_returns(portfolio_ret)

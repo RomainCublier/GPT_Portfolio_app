@@ -15,11 +15,18 @@ def _download_price_data_cached(
     tickers_key: tuple,
     start: Optional[str] = DEFAULT_START_DATE,
     end: Optional[str] = DEFAULT_END_DATE,
+    period: Optional[str] = None,
 ) -> pd.DataFrame:
     tickers_list = list(tickers_key)
 
     try:
-        data = yf.download(tickers_list, start=start, end=end, progress=False)
+        data = yf.download(
+            tickers_list,
+            start=None if period else start,
+            end=None if period else end,
+            period=period,
+            progress=False,
+        )
     except Exception as exc:  # noqa: BLE001 - handled explicitly below
         raise ValueError(handle_network_error(exc)) from exc
 
@@ -49,6 +56,7 @@ def download_price_data(
     tickers: Iterable[str],
     start: Optional[str] = DEFAULT_START_DATE,
     end: Optional[str] = DEFAULT_END_DATE,
+    period: Optional[str] = None,
 ) -> pd.DataFrame:
     """Download adjusted close prices for a list of tickers.
 
@@ -57,7 +65,7 @@ def download_price_data(
     """
 
     tickers_key = tuple(tickers)
-    return _download_price_data_cached(tickers_key, start=start, end=end)
+    return _download_price_data_cached(tickers_key, start=start, end=end, period=period)
 
 
 def ensure_valid_tickers(data: pd.DataFrame, tickers: List[str]) -> List[str]:
