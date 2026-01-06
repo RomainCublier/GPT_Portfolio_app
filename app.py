@@ -10,7 +10,7 @@ st.write(
     Bienvenue ! Utilisez le menu latéral (pages Streamlit) pour :
 
     * Générer automatiquement un portefeuille ETF en fonction de votre profil.
-    * Backtester une allocation personnelle uploadée en CSV.
+    * Accéder au Risk Lab pour analyser le risque et la performance de votre portefeuille.
     * Analyser un actif (action, ETF, crypto) avec les données Yahoo Finance.
     """
 )
