@@ -4,11 +4,11 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
+import yfinance as yf
 
 from core.metrics import drawdown_curve
 from core.returns import compute_returns
-from config import assumptions
-from utils.data_loader import download_price_data, fetch_asset_profile
+from utils.data_loader import fetch_asset_profile
 from utils.metrics import compute_asset_metrics
 from utils.streamlit_helpers import handle_network_error
 
@@ -32,6 +32,28 @@ EXPECTED_DAYS = {
     "5 years": 365 * 5,
     "10 years": 365 * 10,
 }
+
+
+def _fetch_price_history(ticker: str, mapped_period: str) -> pd.DataFrame:
+    """Retrieve adjusted close prices for a ticker over the mapped period."""
+
+    history = yf.Ticker(ticker).history(period=mapped_period, auto_adjust=True)
+    if history.empty:
+        raise ValueError(f"No price history available for {ticker} with period '{mapped_period}'.")
+
+    if "Close" in history.columns:
+        closes = history["Close"]
+    else:
+        closes = history.iloc[:, 0]
+
+    closes_df = pd.DataFrame(closes).rename(columns={closes.name: ticker})
+    closes_df.columns = [ticker]
+    closes_df = closes_df.dropna()
+
+    if closes_df.empty:
+        raise ValueError(f"No price history available for {ticker} with period '{mapped_period}'.")
+
+    return closes_df
 
 
 def run_stock_analyzer():
@@ -84,14 +106,13 @@ def run_stock_analyzer():
 
     if st.button("Analyze"):
         try:
-            yf_period = PERIOD_MAPPING.get(period_label, "5y") or "5y"
+            mapped_period = PERIOD_MAPPING.get(period_label, "5y") or "5y"
 
-            df = download_price_data(
-                [ticker],
-                start=None if yf_period else assumptions.DEFAULT_START_DATE,
-                end=None,
-                period=yf_period,
-            )
+            try:
+                df = _fetch_price_history(ticker, mapped_period)
+            except ValueError as price_err:
+                st.warning(str(price_err))
+                return
 
             if df.empty:
                 st.error("❌ Invalid ticker or no data available.")
@@ -199,14 +220,10 @@ def run_stock_analyzer():
             st.subheader("📌 Risk vs Benchmark (SPY)")
             benchmark_series = None
             try:
-                bench_df = download_price_data(
-                    [ticker, "SPY"],
-                    start=None if yf_period else assumptions.DEFAULT_START_DATE,
-                    end=None,
-                    period=yf_period,
-                )
-                if "SPY" in bench_df.columns:
-                    benchmark_series = bench_df["SPY"].dropna()
+                bench_df = _fetch_price_history("SPY", mapped_period)
+                benchmark_series = bench_df["SPY"].dropna()
+            except ValueError as bench_err:
+                st.warning(str(bench_err))
             except Exception as bench_exc:  # noqa: BLE001
                 st.warning(f"Unable to load benchmark data: {handle_network_error(bench_exc)}")
 
