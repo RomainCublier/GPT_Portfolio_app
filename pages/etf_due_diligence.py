@@ -36,6 +36,27 @@ def _date_range(lookback: str) -> Tuple[datetime | None, datetime]:
 
 def _fetch_volume(ticker: str, start: datetime | None, end: datetime) -> pd.Series:
     data = yf.download(ticker, start=start, end=end, progress=False)
+    if data.empty:
+        return pd.Series(dtype=float)
+
+    volume_col = None
+    if isinstance(data.columns, pd.MultiIndex):
+        for col in data.columns:
+            if any(str(part).lower() == "volume" for part in col):
+                volume_col = col
+                break
+    else:
+        if "Volume" in data:
+            volume_col = "Volume"
+
+    if volume_col is None:
+        return pd.Series(dtype=float)
+
+    volume = data[volume_col]
+    if isinstance(volume, pd.DataFrame):
+        volume = volume.iloc[:, 0]
+    volume = volume.astype(float).ffill()
+    volume.name = "Volume"
     if data.empty or "Volume" not in data:
         return pd.Series(dtype=float)
     volume = data["Volume"].rename("Volume").ffill()
