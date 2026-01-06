@@ -28,7 +28,11 @@ if st.button("Generate Portfolio"):
         st.subheader("📊 Allocation Results")
         st.dataframe(df_alloc)
 
-        st.subheader("📈 Backtest of Generated Portfolio")
+        weights_series = df_alloc.set_index("Ticker")["Allocation (%)"].astype(float) / 100
+        weights_series = weights_series / weights_series.sum()
+        st.session_state["portfolio_weights"] = weights_series
+
+        st.subheader("📈 Performance preview of generated portfolio")
         fig, stats = backtest_portfolio(df_alloc)
         st.plotly_chart(fig, use_container_width=True)
         st.write(stats)
