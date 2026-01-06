@@ -57,6 +57,9 @@ def _fetch_volume(ticker: str, start: datetime | None, end: datetime) -> pd.Seri
         volume = volume.iloc[:, 0]
     volume = volume.astype(float).ffill()
     volume.name = "Volume"
+    if data.empty or "Volume" not in data:
+        return pd.Series(dtype=float)
+    volume = data["Volume"].rename("Volume").ffill()
     volume.index = pd.to_datetime(volume.index)
     return volume
 
