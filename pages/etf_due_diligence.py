@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -21,9 +21,10 @@ from core.etf_analysis import (
 )
 from core.metrics import drawdown_curve, performance_metrics
 from core.returns import compute_returns
+from utils.streamlit_helpers import handle_network_error
 
 
-def _date_range(lookback: str) -> Tuple[datetime | None, datetime]:
+def _date_range(lookback: str) -> Tuple[Optional[datetime], datetime]:
     end = datetime.today()
     if lookback == "3y":
         start = end - timedelta(days=365 * 3)
@@ -34,8 +35,14 @@ def _date_range(lookback: str) -> Tuple[datetime | None, datetime]:
     return start, end
 
 
-def _fetch_volume(ticker: str, start: datetime | None, end: datetime) -> pd.Series:
-    data = yf.download(ticker, start=start, end=end, progress=False)
+def _fetch_volume(ticker: str, start: Optional[datetime], end: datetime) -> pd.Series:
+    """Fetch a normalized volume series for the given ticker."""
+
+    try:
+        data = yf.download(ticker, start=start, end=end, progress=False)
+    except Exception:
+        return pd.Series(dtype=float)
+
     if data.empty:
         return pd.Series(dtype=float)
 
@@ -45,9 +52,8 @@ def _fetch_volume(ticker: str, start: datetime | None, end: datetime) -> pd.Seri
             if any(str(part).lower() == "volume" for part in col):
                 volume_col = col
                 break
-    else:
-        if "Volume" in data:
-            volume_col = "Volume"
+    elif "Volume" in data.columns:
+        volume_col = "Volume"
 
     if volume_col is None:
         return pd.Series(dtype=float)
@@ -55,16 +61,18 @@ def _fetch_volume(ticker: str, start: datetime | None, end: datetime) -> pd.Seri
     volume = data[volume_col]
     if isinstance(volume, pd.DataFrame):
         volume = volume.iloc[:, 0]
-    volume = volume.astype(float).ffill()
-    volume.name = "Volume"
-    if data.empty or "Volume" not in data:
-        return pd.Series(dtype=float)
-    volume = data["Volume"].rename("Volume").ffill()
+
+    volume = pd.to_numeric(volume, errors="coerce").rename("Volume").ffill().dropna()
     volume.index = pd.to_datetime(volume.index)
     return volume
 
 
 def _stress_windows(data_start: pd.Timestamp, data_end: pd.Timestamp) -> Dict[str, Tuple[datetime, datetime]]:
+    if data_start is not None:
+        data_start = pd.Timestamp(data_start).tz_localize(None) if pd.Timestamp(data_start).tz is not None else pd.Timestamp(data_start)
+    if data_end is not None:
+        data_end = pd.Timestamp(data_end).tz_localize(None) if pd.Timestamp(data_end).tz is not None else pd.Timestamp(data_end)
+
     scenarios = {
         "COVID-19 Shock (2020)": (datetime(2020, 2, 15), datetime(2020, 3, 31)),
         "Inflation Spike (2022)": (datetime(2022, 1, 1), datetime(2022, 6, 30)),
@@ -89,7 +97,7 @@ def _format_number(value: float) -> str:
     return f"{value:,.0f}"
 
 
-def _render_price_charts(prices: pd.DataFrame, ticker: str, benchmark: str | None):
+def _render_price_charts(prices: pd.DataFrame, ticker: str, benchmark: Optional[str]):
     st.subheader("Performance & Tracking Quality")
 
     price_fig = go.Figure()
@@ -137,18 +145,24 @@ def main():
     if not run_analysis:
         st.info("Enter a ticker and click **Run due diligence** to see the framework in action.")
         st.stop()
+        return
 
     start, end = _date_range(lookback)
 
+    benchmark = benchmark if benchmark and benchmark != ticker else None
+
     try:
-        prices = download_adjusted_prices([ticker, benchmark], start=start, end=end)
+        requested_tickers = [ticker] + ([benchmark] if benchmark else [])
+        prices = download_adjusted_prices(requested_tickers, start=start, end=end)
     except Exception as exc:  # noqa: BLE001
-        st.error(f"Data error: {exc}")
+        st.error(f"Data error: {handle_network_error(exc)}")
         st.stop()
+        return
 
     if ticker not in prices.columns:
         st.error("ETF price series unavailable. Please try a different ticker or lookback.")
         st.stop()
+        return
 
     benchmark_returns = None
     if benchmark in prices.columns:
@@ -160,6 +174,7 @@ def main():
     if etf_returns.empty:
         st.error("No returns available for the selected parameters.")
         st.stop()
+        return
 
     annual_factor = 252
     perf = performance_metrics(etf_returns, periods_per_year=annual_factor)
@@ -171,7 +186,9 @@ def main():
 
     volume_series = _fetch_volume(ticker, start, end)
     liquidity_input = prices[[ticker]].copy()
-    if not volume_series.empty:
+    if volume_series.empty:
+        st.info("Volume data unavailable for this ticker; liquidity metrics are partially estimated.")
+    else:
         liquidity_input["Volume"] = volume_series.reindex(liquidity_input.index)
     liquidity = liquidity_proxies(liquidity_input)
 

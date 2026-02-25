@@ -17,6 +17,11 @@ def backtest_portfolio(df_allocation: pd.DataFrame):
     """
 
     df_alloc = allocation_percent_to_weights(df_allocation)
+    df_alloc = df_alloc[df_alloc["Poids"] > 0].copy()
+
+    if df_alloc.empty:
+        raise ValueError("Portfolio has no positive weights to backtest.")
+
     tickers = df_alloc["Ticker"].tolist()
     weights = df_alloc["Poids"].tolist()
 
@@ -24,7 +29,10 @@ def backtest_portfolio(df_allocation: pd.DataFrame):
     valid_tickers = ensure_valid_tickers(data, tickers)
 
     weights = [w for t, w in zip(tickers, weights) if t in valid_tickers]
-    weights = [w / sum(weights) for w in weights]
+    total_weight = sum(weights)
+    if total_weight <= 0:
+        raise ValueError("No positive weights remain after filtering unavailable tickers.")
+    weights = [w / total_weight for w in weights]
     data = data[valid_tickers]
 
     normalized = data / data.iloc[0]
