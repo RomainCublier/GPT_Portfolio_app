@@ -28,7 +28,7 @@ def generate_portfolio_allocation(capital, risk, horizon, esg):
         alloc.pop("BTC-USD")
 
     total = sum(alloc.values())
-    alloc = {k: round(v / total * 100, 2) for k, v in alloc.items()}
+    alloc = {k: round(v / total * 100, 2) for k, v in alloc.items() if v > 0}
 
     df = pd.DataFrame(
         {
