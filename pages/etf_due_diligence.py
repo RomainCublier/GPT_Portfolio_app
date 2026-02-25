@@ -68,6 +68,11 @@ def _fetch_volume(ticker: str, start: datetime | None, end: datetime) -> pd.Seri
 
 
 def _stress_windows(data_start: pd.Timestamp, data_end: pd.Timestamp) -> Dict[str, Tuple[datetime, datetime]]:
+    if data_start is not None:
+        data_start = pd.Timestamp(data_start).tz_localize(None) if pd.Timestamp(data_start).tz is not None else pd.Timestamp(data_start)
+    if data_end is not None:
+        data_end = pd.Timestamp(data_end).tz_localize(None) if pd.Timestamp(data_end).tz is not None else pd.Timestamp(data_end)
+
     scenarios = {
         "COVID-19 Shock (2020)": (datetime(2020, 2, 15), datetime(2020, 3, 31)),
         "Inflation Spike (2022)": (datetime(2022, 1, 1), datetime(2022, 6, 30)),
@@ -140,6 +145,7 @@ def main():
     if not run_analysis:
         st.info("Enter a ticker and click **Run due diligence** to see the framework in action.")
         st.stop()
+        return
 
     start, end = _date_range(lookback)
 
@@ -151,10 +157,12 @@ def main():
     except Exception as exc:  # noqa: BLE001
         st.error(f"Data error: {handle_network_error(exc)}")
         st.stop()
+        return
 
     if ticker not in prices.columns:
         st.error("ETF price series unavailable. Please try a different ticker or lookback.")
         st.stop()
+        return
 
     benchmark_returns = None
     if benchmark in prices.columns:
@@ -166,6 +174,7 @@ def main():
     if etf_returns.empty:
         st.error("No returns available for the selected parameters.")
         st.stop()
+        return
 
     annual_factor = 252
     perf = performance_metrics(etf_returns, periods_per_year=annual_factor)
