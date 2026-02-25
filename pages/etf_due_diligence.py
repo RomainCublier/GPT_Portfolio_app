@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -24,7 +24,7 @@ from core.returns import compute_returns
 from utils.streamlit_helpers import handle_network_error
 
 
-def _date_range(lookback: str) -> Tuple[datetime | None, datetime]:
+def _date_range(lookback: str) -> Tuple[Optional[datetime], datetime]:
     end = datetime.today()
     if lookback == "3y":
         start = end - timedelta(days=365 * 3)
@@ -97,7 +97,7 @@ def _format_number(value: float) -> str:
     return f"{value:,.0f}"
 
 
-def _render_price_charts(prices: pd.DataFrame, ticker: str, benchmark: str | None):
+def _render_price_charts(prices: pd.DataFrame, ticker: str, benchmark: Optional[str]):
     st.subheader("Performance & Tracking Quality")
 
     price_fig = go.Figure()
