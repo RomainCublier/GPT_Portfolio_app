@@ -4,15 +4,21 @@ from config.assumptions import APP_NAME
 
 st.set_page_config(page_title=f"{APP_NAME} — AI Investment App", layout="wide")
 
-st.title("🤖 GPT Portfolio Assistant")
-st.write(
-    """
-    Bienvenue ! Utilisez le menu latéral (pages Streamlit) pour :
 
-    * Générer automatiquement un portefeuille ETF en fonction de votre profil.
-    * Accéder au Risk Lab pour analyser le risque et la performance de votre portefeuille.
-    * Analyser un actif (action, ETF, crypto) avec les données Yahoo Finance.
-    """
-)
+PAGES = [
+    st.Page("pages/portfolio_generator.py", title="Portfolio Generator", icon="🤖"),
+    st.Page("pages/etf_due_diligence.py", title="ETF & Fund Due Diligence", icon="🧾"),
+    st.Page("pages/asset_analysis.py", title="Asset Analysis", icon="📈"),
+    st.Page("pages/risk_lab.py", title="Risk Lab", icon="🧮"),
+]
 
-st.success("Sélectionnez une page dans la barre latérale pour commencer.")
+
+if hasattr(st, "navigation"):
+    navigation = st.navigation(PAGES, position="sidebar")
+    navigation.run()
+else:
+    st.title("🤖 GPT Portfolio Assistant")
+    st.warning(
+        "Your Streamlit version is too old for programmatic navigation. "
+        "Please upgrade Streamlit (>=1.36) or use the sidebar multipage menu."
+    )

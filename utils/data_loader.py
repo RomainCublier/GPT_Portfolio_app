@@ -31,7 +31,10 @@ def _download_price_data_cached(
         raise ValueError(handle_network_error(exc)) from exc
 
     if data.empty:
-        raise ValueError("No market data retrieved for the provided tickers.")
+        raise ValueError(
+            "No market data retrieved for the provided tickers. "
+            "This is often caused by a temporary Yahoo Finance/network restriction."
+        )
 
     if isinstance(data.columns, pd.MultiIndex):
         if "Adj Close" in data.columns.levels[0]:

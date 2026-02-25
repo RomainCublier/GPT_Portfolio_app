@@ -27,13 +27,26 @@ def handle_network_error(exc: Exception) -> str:
         "HTTPError",
         "URLError",
         "SSLError",
+        "ProxyError",
     )
 
     exc_name = exc.__class__.__name__
+    message = str(exc)
+    lowered_message = message.lower()
+
     if any(keyword in exc_name for keyword in network_errors):
         return (
             "Network issue detected while retrieving data. Please check your "
             "connection or try again in a few minutes."
         )
 
-    return str(exc)
+    if any(
+        marker in lowered_message
+        for marker in ("proxyerror", "connect tunnel failed", "failed downloads", "timeout")
+    ):
+        return (
+            "Market data download failed due to a network/proxy issue. "
+            "Please verify internet access to Yahoo Finance and try again."
+        )
+
+    return message
