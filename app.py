@@ -1,6 +1,7 @@
 import streamlit as st
 
 from config.assumptions import APP_NAME
+from pages import etf_due_diligence
 
 st.set_page_config(page_title=f"{APP_NAME} — AI Investment App", layout="wide")
 
