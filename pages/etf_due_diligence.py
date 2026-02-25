@@ -36,7 +36,6 @@ def _date_range(lookback: str) -> Tuple[Optional[datetime], datetime]:
 
 
 def _fetch_volume(ticker: str, start: Optional[datetime], end: datetime) -> pd.Series:
-def _fetch_volume(ticker: str, start: datetime | None, end: datetime) -> pd.Series:
     """Fetch a normalized volume series for the given ticker."""
 
     try:
