@@ -8,6 +8,8 @@ from typing import Iterable, Optional
 import pandas as pd
 import yfinance as yf
 
+from utils.streamlit_helpers import handle_network_error
+
 
 def _extract_adjusted_close(data: pd.DataFrame, tickers: list[str]) -> pd.DataFrame:
     """Return adjusted close prices from a yfinance download result.
@@ -52,11 +54,17 @@ def download_adjusted_prices(
     if not clean_tickers:
         raise ValueError("Please provide at least one valid ticker symbol.")
 
-    data = yf.download(clean_tickers, start=start, end=end, progress=False)
+    try:
+        data = yf.download(clean_tickers, start=start, end=end, progress=False)
+    except Exception as exc:  # noqa: BLE001 - handled for user-facing display
+        raise ValueError(handle_network_error(exc)) from exc
     prices = _extract_adjusted_close(data, clean_tickers)
     prices = prices.ffill().dropna(how="all")
 
     if prices.empty:
-        raise ValueError("Price series is empty after cleaning. Check tickers or dates.")
+        raise ValueError(
+            "Price series is empty after cleaning. Check tickers/dates or "
+            "internet access to Yahoo Finance."
+        )
 
     return prices
